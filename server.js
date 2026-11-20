@@ -10,6 +10,7 @@ const io = new Server(server);
 const PORT = 3000;
 
 const TEMPO_CARREGAMENTO_MS = 5000;
+const TEMPO_RODADA_MS = 10000;
 const VITORIAS_PARA_GANHAR = 2; 
 const JOGADAS_VALIDAS = ["pedra", "papel", "tesoura"];
 
@@ -36,7 +37,27 @@ function emitirPlacar(sala) {
     });
 }
 
+function iniciarCronometroRodada(sala) {
+    cancelarCronometroRodada(sala);
+
+    sala.temporizadorRodada = setTimeout(() => {
+        sala.temporizadorRodada = null;
+
+        console.log(`Sala ${sala.codigo}: tempo da rodada esgotado!`);
+
+    }, TEMPO_RODADA_MS);
+}
+
+function cancelarCronometroRodada(sala) {
+    if (sala.temporizadorRodada !== null) {
+        clearTimeout(sala.temporizadorRodada);
+        sala.temporizadorRodada = null;
+    }
+}
+
 function reiniciarPartida(sala) {
+    cancelarCronometroRodada(sala);
+
     if (sala.temporizador) {
         clearTimeout(sala.temporizador);
         sala.temporizador = null;
@@ -58,6 +79,7 @@ function iniciarCarregamento(sala) {
         sala.status = STATUS_PARTIDA.EM_ANDAMENTO;
         console.log(`Sala ${sala.codigo}: ${sala.status}`);
         emitirStatus(sala);
+        iniciarCronometroRodada(sala);
     }, TEMPO_CARREGAMENTO_MS);
 }
 
@@ -142,6 +164,7 @@ io.on("connection", (socket) => {
         socket.to(sala.codigo).emit("login", `${nomeDoPapel(jogador)} já jogou!`);
 
         if (sala.jogadas.jogador1 === null || sala.jogadas.jogador2 === null) return;
+        cancelarCronometroRodada(sala);
 
         const jogadas = { ...sala.jogadas };
         const resultado = determinarResultado(jogadas.jogador1, jogadas.jogador2);
@@ -172,6 +195,8 @@ io.on("connection", (socket) => {
         } else {
             if (resultado !== "empate") sala.rodada++;
             emitirPlacar(sala);
+
+            iniciarCronometroRodada(sala);
         }
     });
 
@@ -185,6 +210,7 @@ io.on("connection", (socket) => {
         sala.status = STATUS_PARTIDA.EM_ANDAMENTO;
         emitirStatus(sala);
         emitirPlacar(sala);
+        iniciarCronometroRodada(sala);
         io.to(sala.codigo).emit("login", "Nova partida iniciada!");
     });
 
