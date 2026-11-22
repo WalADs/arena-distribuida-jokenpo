@@ -86,8 +86,19 @@ function limparMarcacaoBotoes() {
 }
 
 function textoResultadoRodada({ jogadas, resultado }) {
-    const confronto = `${EMOJIS[jogadas.jogador1]} x ${EMOJIS[jogadas.jogador2]}`;
+   // const confronto = `${EMOJIS[jogadas.jogador1]} x ${EMOJIS[jogadas.jogador2]}`;
+const jogada1 =
+    jogadas.jogador1
+        ? EMOJIS[jogadas.jogador1]
+        : "⏰";
 
+const jogada2 =
+    jogadas.jogador2
+        ? EMOJIS[jogadas.jogador2]
+        : "⏰";
+
+const confronto =
+    `${jogada1} x ${jogada2}`;
     if (resultado === "empate") return `${confronto} — Empate! Jogue de novo.`;
     if (souJogador()) {
         return resultado === meuPapel
@@ -164,6 +175,12 @@ socket.on("jogada_registrada", ({ jogada }) => {
 socket.on("resultado_rodada", (dados) => {
     resultadoEl.textContent = textoResultadoRodada(dados);
     adicionarLog(`Rodada ${dados.rodada}: ${resultadoEl.textContent}`);
+     // adicionado log de tempo esgotado caso o jogador não tenha feito a jogada
+     
+     if ( dados.timeout) {
+                        adicionarLog("⏰ Tempo esgotado."
+            );
+        }
     jaJoguei = false;
     limparMarcacaoBotoes();
     atualizarBotoes();
