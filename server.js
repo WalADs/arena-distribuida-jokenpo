@@ -10,7 +10,8 @@ const io = new Server(server);
 const PORT = 3000;
 
 const TEMPO_CARREGAMENTO_MS = 5000;
-const VITORIAS_PARA_GANHAR = 2; 
+const TEMPO_RODADA_MS = 10000;
+const VITORIAS_PARA_GANHAR = 3; // Alterado de 2 para 3 Número de vitórias necessárias para encerrar a partida
 const JOGADAS_VALIDAS = ["pedra", "papel", "tesoura"];
 
 app.use(express.static("public"));
@@ -36,7 +37,178 @@ function emitirPlacar(sala) {
     });
 }
 
+function iniciarCronometroRodada(sala) {
+    cancelarCronometroRodada(sala);
+
+    sala.temporizadorRodada = setTimeout(() => {
+
+    sala.temporizadorRodada = null;
+    // Evita executar duas vezes a mesma rodada
+
+if (
+    sala.status !==
+    STATUS_PARTIDA.EM_ANDAMENTO
+) {
+    return;
+}
+
+    console.log(
+        `Sala ${sala.codigo}: tempo da rodada esgotado!`
+    );
+
+    let resultado;
+
+    // Apenas jogador 1 jogou
+
+    if (
+        sala.jogadas.jogador1 &&
+        !sala.jogadas.jogador2
+    ) {
+
+        resultado = "jogador1";
+    }
+
+    // Apenas jogador 2 jogou
+
+    else if (
+        !sala.jogadas.jogador1 &&
+        sala.jogadas.jogador2
+    ) {
+
+        resultado = "jogador2";
+    }
+
+    // Ninguém jogou
+
+    else if (
+        !sala.jogadas.jogador1 &&
+        !sala.jogadas.jogador2
+    ) {
+
+        resultado = "empate";
+    }
+
+    // Ambos jogaram
+
+    else {
+
+        resultado =
+            determinarResultado(
+                sala.jogadas.jogador1,
+                sala.jogadas.jogador2
+            );
+    }
+
+    if (
+        resultado === "jogador1"
+    ) {
+
+        sala.placarRodadas.jogador1++;
+    }
+
+    if (
+        resultado === "jogador2"
+    ) {
+
+        sala.placarRodadas.jogador2++;
+    }
+
+    io.to(sala.codigo)
+      .emit(
+          "resultado_rodada",
+          {
+              rodada: sala.rodada,
+
+              jogadas: {
+                  ...sala.jogadas
+              },
+
+              resultado,
+
+              timeout: true,
+
+              placar: {
+                  ...sala.placarRodadas
+              }
+          }
+      );
+
+    sala.jogadas = {
+
+        jogador1: null,
+        jogador2: null
+
+    };
+// ----------------------------------
+// Verifica se alguém venceu a partida
+// ----------------------------------
+
+const houveVencedor =
+
+    resultado !== "empate"
+
+    &&
+
+    sala.placarRodadas[
+        resultado
+    ] >= VITORIAS_PARA_GANHAR;
+
+// ----------------------------------
+// Encerrar partida
+// ----------------------------------
+
+if (houveVencedor) {
+
+    sala.status =STATUS_PARTIDA.ENCERRADA;
+
+    emitirStatus(sala);
+
+    io.to(sala.codigo).emit(
+        "fim_partida",
+        {
+            vencedor:resultado,
+            placar: { ...sala.placarRodadas
+            }
+        }
+      );
+}
+
+// ----------------------------------
+// Próxima rodada
+// ----------------------------------
+
+  else {
+
+    if (
+        resultado !== "empate"
+    ) {
+
+        sala.rodada++;
+    }
+
+    emitirPlacar(
+        sala
+    );
+
+    iniciarCronometroRodada(
+        sala
+    );
+}
+  
+  }, TEMPO_RODADA_MS);
+
+  }
+
+  function cancelarCronometroRodada(sala) {
+      if (sala.temporizadorRodada !== null) {
+          clearTimeout(sala.temporizadorRodada);
+          sala.temporizadorRodada = null;
+      }
+  }
+
 function reiniciarPartida(sala) {
+    cancelarCronometroRodada(sala);
+
     if (sala.temporizador) {
         clearTimeout(sala.temporizador);
         sala.temporizador = null;
@@ -58,6 +230,7 @@ function iniciarCarregamento(sala) {
         sala.status = STATUS_PARTIDA.EM_ANDAMENTO;
         console.log(`Sala ${sala.codigo}: ${sala.status}`);
         emitirStatus(sala);
+        iniciarCronometroRodada(sala);
     }, TEMPO_CARREGAMENTO_MS);
 }
 
@@ -92,7 +265,6 @@ function entrarNaSala(socket, sala) {
     }
 }
 
-
 io.on("connection", (socket) => {
     console.log("Um jogador entrou!");
 
@@ -117,11 +289,37 @@ io.on("connection", (socket) => {
     socket.on("jogada", (jogada) => {
         const sala = consultarSala(socket.data.codigo);
         if (!sala) return;
+ // 
+// ISSUE #18
+// Bloqueia jogadas após o timeout
 
-        if (sala.status !== STATUS_PARTIDA.EM_ANDAMENTO) {
-            return socket.emit("erro", { mensagem: "A partida ainda não está em andamento." });
+if (
+    sala.status !==
+    STATUS_PARTIDA.EM_ANDAMENTO
+) {
+
+    return socket.emit(
+        "erro",
+        {
+            mensagem:
+                "A partida ainda não está em andamento."
         }
+    );
+}
 
+if (
+    sala.temporizadorRodada === null
+) {
+
+    return socket.emit(
+        "erro",
+        {
+            mensagem:
+                "O tempo da rodada acabou."
+        }
+    );
+}
+      
         const jogador = papelDoSocket(sala, socket);
         if (!jogador) {
             return socket.emit("erro", { mensagem: "Espectadores não podem realizar jogadas." });
@@ -142,6 +340,7 @@ io.on("connection", (socket) => {
         socket.to(sala.codigo).emit("login", `${nomeDoPapel(jogador)} já jogou!`);
 
         if (sala.jogadas.jogador1 === null || sala.jogadas.jogador2 === null) return;
+        cancelarCronometroRodada(sala);
 
         const jogadas = { ...sala.jogadas };
         const resultado = determinarResultado(jogadas.jogador1, jogadas.jogador2);
@@ -172,6 +371,8 @@ io.on("connection", (socket) => {
         } else {
             if (resultado !== "empate") sala.rodada++;
             emitirPlacar(sala);
+
+            iniciarCronometroRodada(sala);
         }
     });
 
@@ -185,6 +386,7 @@ io.on("connection", (socket) => {
         sala.status = STATUS_PARTIDA.EM_ANDAMENTO;
         emitirStatus(sala);
         emitirPlacar(sala);
+        iniciarCronometroRodada(sala);
         io.to(sala.codigo).emit("login", "Nova partida iniciada!");
     });
 
