@@ -69,8 +69,19 @@ function textoStatus() {
 }
 
 function textoRodada({ jogadas, resultado }) {
-    const confronto = `${EMOJIS[jogadas.jogador1]} x ${EMOJIS[jogadas.jogador2]}`;
+   // const confronto = `${EMOJIS[jogadas.jogador1]} x ${EMOJIS[jogadas.jogador2]}`;
+const jogada1 =
+    jogadas.jogador1
+        ? EMOJIS[jogadas.jogador1]
+        : "⏰";
 
+const jogada2 =
+    jogadas.jogador2
+        ? EMOJIS[jogadas.jogador2]
+        : "⏰";
+
+const confronto =
+    `${jogada1} x ${jogada2}`;
     if (resultado === "empate") return `${confronto} — Empate! Jogue de novo.`;
     if (souJogador()) {
         return resultado === estado.papel
@@ -181,6 +192,9 @@ const handlers = {
         estado.jaJoguei = false;
         estado.jogadaEscolhida = null;
         registrarLog(`Rodada ${dados.rodada}: ${textoRodada(dados)}`);
+        if (dados.timeout) {
+            registrarLog("⏰ Tempo esgotado.");
+        }
     },
 
     fim_partida({ vencedor }) {
