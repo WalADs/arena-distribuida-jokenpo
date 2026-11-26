@@ -41,10 +41,10 @@ function emitirPlacar(sala) {
 
 function iniciarCronometroRodada(sala) {
     cancelarCronometroRodada(sala);
-
+    sala.aceitandoJogadas = true;
     sala.temporizadorRodada = setTimeout(() => {
-
     sala.temporizadorRodada = null;
+    sala.aceitandoJogadas = false;
     // Evita executar duas vezes a mesma rodada
 
 if (
@@ -179,7 +179,7 @@ if (houveVencedor) {
 // Próxima rodada
 // ----------------------------------
 
-  else {
+ else {
 
     if (
         resultado !== "empate"
@@ -192,9 +192,24 @@ if (houveVencedor) {
         sala
     );
 
-    iniciarCronometroRodada(
+    sala.status =
+        STATUS_PARTIDA.CARREGANDO;
+
+    emitirStatus(
         sala
     );
+
+    sala.temporizadorProximaRodada =
+        setTimeout(() => { sala.temporizadorProximaRodada =null;
+
+            if (sala.status !==STATUS_PARTIDA.CARREGANDO) 
+                {return;
+            }
+
+            sala.status =STATUS_PARTIDA.EM_ANDAMENTO;  
+            emitirStatus(sala);
+            iniciarCronometroRodada(sala);
+        }, 3000);
 }
   
   }, TEMPO_RODADA_MS);
@@ -210,6 +225,16 @@ if (houveVencedor) {
 
 function reiniciarPartida(sala) {
     cancelarCronometroRodada(sala);
+    if (
+        sala.temporizadorProximaRodada
+    ) {
+
+        clearTimeout(
+            sala.temporizadorProximaRodada
+        );
+
+        sala.temporizadorProximaRodada =null;
+    }
 
     if (sala.temporizador) {
         clearTimeout(sala.temporizador);
@@ -291,6 +316,14 @@ io.on("connection", (socket) => {
     socket.on("jogada", (jogada) => {
         const sala = consultarSala(socket.data.codigo);
         if (!sala) return;
+        if (!sala.aceitandoJogadas) {
+
+    return socket.emit("erro",
+        {
+            mensagem:"A rodada já foi encerrada."
+        }
+    );
+}
  // 
 // ISSUE #18
 // Bloqueia jogadas após o timeout
@@ -303,8 +336,7 @@ if (
     return socket.emit(
         "erro",
         {
-            mensagem:
-                "A partida ainda não está em andamento."
+            mensagem:"A partida ainda não está em andamento."
         }
     );
 }
@@ -343,6 +375,7 @@ if (
 
         if (sala.jogadas.jogador1 === null || sala.jogadas.jogador2 === null) return;
         cancelarCronometroRodada(sala);
+        sala.aceitandoJogadas =false;
 
         const jogadas = { ...sala.jogadas };
         const resultado = determinarResultado(jogadas.jogador1, jogadas.jogador2);
@@ -371,11 +404,51 @@ if (
                 placar: { ...sala.placarRodadas }
             });
         } else {
-            if (resultado !== "empate") sala.rodada++;
-            emitirPlacar(sala);
 
-            iniciarCronometroRodada(sala);
-        }
+    if (
+        resultado !== "empate"
+    ) {
+
+        sala.rodada++;
+    }
+
+    emitirPlacar(
+        sala
+    );
+
+    sala.status =
+        STATUS_PARTIDA.CARREGANDO;
+
+    emitirStatus(
+        sala
+    );
+
+    sala.temporizadorProximaRodada =
+        setTimeout(() => {
+
+            sala.temporizadorProximaRodada =
+                null;
+
+            if (
+                sala.status !==
+                STATUS_PARTIDA.CARREGANDO
+            ) {
+                return;
+            }
+
+            sala.status =
+                STATUS_PARTIDA.EM_ANDAMENTO;
+
+            emitirStatus(
+                sala
+            );
+
+            iniciarCronometroRodada(
+                sala
+            );
+
+        }, 3000);
+    }
     });
 
     socket.on("revanche", () => {
