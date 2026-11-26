@@ -97,4 +97,4 @@ O sistema pergunta se o Node pode aceitar conexões de entrada. Permita.
 
 ## Integrantes
 
-- _Adicionar nomes dos integrantes do grupo_
+- Grupo: Álvaro Giovanni, Geovana Messias, Kelvin Adriel, Maiara Zuim, Walter Pereira e Willian Cauã.
